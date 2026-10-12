@@ -2939,6 +2939,42 @@ class TestSweeps(unittest.TestCase):
         self.assertIsInstance(open_shell, sm.Brep)
         self.assertFalse(open_shell.is_manifold_solid())
 
+    def test_linear_sweep_oblique_and_reversed(self):
+        # Regression for side faces and caps that moved by different sweeps. An
+        # oblique direction gave an open zero-volume body, and a negative distance
+        # hung for a circle or gave a garbage body when oblique. The result must
+        # be a sheared prism of volume area * |distance| * cos(angle).
+        profiles = (
+            (lambda: sm.create_rectangle((0, 0, 0), 2, 2), 4.0),
+            (lambda: [sm.create_circle((0, 0, 0), 2)], math.pi * 4.0),
+        )
+        sweeps = (((0.2, 0, 1), 3), ((1, 0, 1), 3), ((0, 0, 1), -3), ((1, 0, 1), -3))
+        for make_profile, area in profiles:
+            for direction, distance in sweeps:
+                with self.subTest(area=area, direction=direction, distance=distance):
+                    r = sm.linear_sweep(make_profile(), direction, distance)
+                    self.assertTrue(r.is_manifold_solid())
+                    cos_angle = direction[2] / math.hypot(*direction)
+                    self.assertAlmostEqual(r.volume(1e-6), area * abs(distance) * cos_angle, delta=1e-3)
+
+    def test_linear_sweep_ignores_direction_magnitude(self):
+        # Distance alone sets the sweep length, for single and repeated sweeps.
+        for direction, cos_angle in (((0, 0, 2), 1.0), ((3, 0, 3), math.sqrt(0.5))):
+            with self.subTest(direction=direction):
+                r = sm.linear_sweep(sm.create_rectangle((0, 0, 0), 4, 2), direction, 10)
+                self.assertAlmostEqual(r.volume(1e-6), 80.0 * cos_angle, delta=1e-3)
+        r = sm.linear_sweep_with_repetitions(
+            [sm.create_circle((0, 0, 0), 2)], (0, 0, 2), 10, repetitions=2, cap_ends=False)
+        lo, hi = r.bounding_box()
+        self.assertAlmostEqual(hi[2] - lo[2], 20.0, delta=1e-3)
+
+    def test_linear_sweep_zero_direction_raises(self):
+        circ = sm.create_circle((0, 0, 0), 2)
+        with self.assertRaises(RuntimeError):
+            sm.linear_sweep([circ], (0, 0, 0), 10)
+        with self.assertRaises(RuntimeError):
+            sm.linear_sweep_with_repetitions([circ], (0, 0, 0), 10, repetitions=2, cap_ends=False)
+
 
 # -----------------------------------------------------------------------
 #  Sweep / revolution inputs must survive the call (Pure: inputs unchanged)
