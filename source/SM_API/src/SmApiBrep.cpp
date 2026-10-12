@@ -1214,7 +1214,12 @@ SmBoolean bDebugMe = FALSE ;
         SmApiDraw( sStart, rSweepDir, NULL, 0, 0 );
     }
 #endif // SM_DEBUG_CODE
-    
+
+    // Only the direction of rSweepDir is used. dSweepDist alone sets the sweep length.
+    SmVector3d sSweepDir = rSweepDir;
+    if( sSweepDir.Unitize() != SM_SUCCESS )
+        return( SM_ERR_INVALID_INPUT );
+
     SmContext* pContext = SmApiGetOrCreateContext();
 
     // Sweep copies of the inputs: CreateLinearSweep consumes the curves.
@@ -1225,7 +1230,7 @@ SmBoolean bDebugMe = FALSE ;
     SmObjDelete sBrepCleanup( pBrep );
 
     SmPrimitiveCreation pPrimitive( pBrep->GetInfiniteRegion(), 0, true );
-    SER( pPrimitive.CreateLinearSweep( sCurveCopies, rSweepDir, dSweepDist, 1, bCapEnds ) );
+    SER( pPrimitive.CreateLinearSweep( sCurveCopies, sSweepDir, dSweepDist, 1, bCapEnds ) );
 
 #ifdef SM_ASSERT_VALID
     SM_ASSERT_VALID( pBrep );
@@ -1696,6 +1701,11 @@ SmApiStatus SmApiCreateLinearSweepWithRepetitions
     if( rCurvesToSweep.GetSize() < 1 )
         return SM_ERR_INVALID_INPUT;
 
+    // Only the direction of rSweepDir is used. dSweepDist alone sets the length of each sweep.
+    SmVector3d sSweepDir = rSweepDir;
+    if( sSweepDir.Unitize() != SM_SUCCESS )
+        return SM_ERR_INVALID_INPUT;
+
     SmContext* pContext = SmApiGetOrCreateContext();
 
     // Sweep copies of the inputs: CreateLinearSweep consumes the curves.
@@ -1706,7 +1716,7 @@ SmApiStatus SmApiCreateLinearSweepWithRepetitions
     SmObjDelete sBrepCleanup( pBrep );
 
     SmPrimitiveCreation sPC( pBrep->GetInfiniteRegion() );
-    SER( sPC.CreateLinearSweep( sCurveCopies, rSweepDir, dSweepDist, nRepetitions, bCapEnds ) );
+    SER( sPC.CreateLinearSweep( sCurveCopies, sSweepDir, dSweepDist, nRepetitions, bCapEnds ) );
 
     sBrepCleanup.Clear();
     rpResult = pBrep;

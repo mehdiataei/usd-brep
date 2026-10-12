@@ -1157,7 +1157,6 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
     SmBrep* pBrep = m_pRegion->GetBrep();
     const SmContext* pContext = pBrep->GetContext();
     double dTol = pBrep->GetTolerance();
-    SmExtent2d sAnalDomain(0.0, 0.0, 1.0, dSweepDist);
     SmSurface* pExtSurface = NULL;
 
     SmTemporaryChangeValue<SmBoolean> sDoingBool(SM_CONST_CAST(SmContext*, pContext)->GetDoingBooleanRef(), TRUE);
@@ -1193,6 +1192,14 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
     // and clearing it if we make end caps.
 
     SmObjsDelete<SmCurve*> sCleanInputCurves(&cr3DCurves);
+
+    // The side faces and both caps must all move by SweepDist * SweepVec. Split that sweep
+    // into one unit direction and one positive length so a non-unit vector or a negative
+    // distance gives every face the same sweep.
+    SmVector3d sSweepDir = dSweepDist * crSweepVec;
+    const double dSweepLen = sSweepDir.Length();
+    SER(sSweepDir.Unitize());
+    SmExtent2d sAnalDomain(0.0, 0.0, 1.0, dSweepLen);
 
 
 #ifdef SM_DEBUG_CODE
@@ -1261,7 +1268,7 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
             SmPoint3d startPt, endPt;
             pCrvToExtrude->GetEnds(startPt, endPt);
             SmVector3d sLineVector = endPt - startPt;
-            SmVector2d sScale(sLineVector.Length(), dSweepDist);
+            SmVector2d sScale(sLineVector.Length(), dSweepLen);
             SmExtent2d sDomain(0.0, 0.0, 1.0, 1.0);
 
             sLineVector.Unitize();
@@ -1269,9 +1276,9 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
             // SMLib requires that SmPlanes be a rectangle
             // Therefore, we check for an orthogonal sweep vector
             // Use the same criterion that is used in the SmPlane constructor:
-            if (smos_Fabs(sLineVector.Dot(crSweepVec)) < SM_EFF_ZERO)
+            if (smos_Fabs(sLineVector.Dot(sSweepDir)) < SM_EFF_ZERO)
             {
-                SmPlane* pPlane = new (*pContext) SmPlane(startPt, sLineVector, crSweepVec, sScale, sDomain);
+                SmPlane* pPlane = new (*pContext) SmPlane(startPt, sLineVector, sSweepDir, sScale, sDomain);
                 if (pPlane != NULL)
                 {
                     pExtSurface = (SmSurface*)pPlane;
@@ -1288,10 +1295,10 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
             if (dSweepAngleDeg < 360.0 + dTol && dSweepAngleDeg > 360.0 - dTol)
             {
                 SmVector3d zAxis = sFrame.GetZAxis();
-                if (zAxis.IsParallelTo(crSweepVec, 0.5))
+                if (zAxis.IsParallelTo(sSweepDir, 0.5))
                 {
                     // If parallel, we still must check if it is opposite
-                    if (crSweepVec.Dot(zAxis) < 0.0)
+                    if (sSweepDir.Dot(zAxis) < 0.0)
                     {
                         sFrame.RotateAboutAxisAtPoint(180 * NL_PI / 180, sFrame.GetOrigin(), sFrame.GetXAxis());
                     }
@@ -1302,7 +1309,7 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
                     {
                         // bound cylinder
                         SmExtent2d sExtent;
-                        sExtent.SetMinMax(0, 0, 360.0, dSweepDist);
+                        sExtent.SetMinMax(0, 0, 360.0, dSweepLen);
                         pCylinder->AdjustSTEPUVDomain(sExtent);
 
                         pExtSurface = (SmSurface*)pCylinder;
@@ -1322,7 +1329,7 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
             SmBSplineCurve* pBSplCopy = SM_CAST_PTR(SmBSplineCurve, pCrvCopy);
             NER(pBSplCopy);
 
-            eStat = SmSurfOfExtrusion::CreateCanonical(*pContext, pBSplCopy, crSweepVec, pSrfExt);
+            eStat = SmSurfOfExtrusion::CreateCanonical(*pContext, pBSplCopy, sSweepDir, pSrfExt);
 
             if (pSrfExt != NULL && eStat == SM_SUCCESS)
             {
@@ -1410,9 +1417,7 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
         // does it make sense to simply copy and translate the first cap?
 
         // build sweep transform into an SmAxis2Placement object
-        SmVector3d sExtrudeVector(crSweepVec.x, crSweepVec.y, crSweepVec.z);
-        sExtrudeVector.Unitize();
-        sExtrudeVector = sExtrudeVector * dSweepDist;
+        SmVector3d sExtrudeVector = sSweepDir * dSweepLen;
         SmAxis2Placement sTranslate(SmVector3d(0, 0, 0), SmVector3d(1, 0, 0), SmVector3d(0, 1, 0));
         sTranslate.Translate(sExtrudeVector);
         SmTArray<SmCurve*> sEndCurves;
@@ -1505,7 +1510,6 @@ SmStatus SmPrimitiveCreation::CreateLinearSweepSimple
   SmBrep          * pBrep        = m_pRegion->GetBrep();
   const SmContext * pContext     = pBrep->GetContext();
   double            dTol         = pBrep->GetTolerance();
-  SmExtent2d        sAnalDomain(0.0, 0.0, 1.0, dSweepDist) ;
   SmSurface*        pExtSurface = NULL;
 
   SmTemporaryChangeValue< SmBoolean > sDoingBool( SM_CONST_CAST(SmContext*, pContext)->GetDoingBooleanRef(), TRUE );
@@ -1541,6 +1545,14 @@ SmStatus SmPrimitiveCreation::CreateLinearSweepSimple
   // and clearing it if we make end caps.
 
   SmObjsDelete< SmCurve* > sCleanInputCurves( &cr3DCurves );
+
+  // The side faces and both caps must all move by SweepDist * SweepVec. Split that sweep
+  // into one unit direction and one positive length so a non-unit vector or a negative
+  // distance gives every face the same sweep.
+  SmVector3d   sSweepDir = dSweepDist * crSweepVec;
+  const double dSweepLen = sSweepDir.Length();
+  SER( sSweepDir.Unitize() );
+  SmExtent2d   sAnalDomain(0.0, 0.0, 1.0, dSweepLen) ;
 
 
 #ifdef SM_DEBUG_CODE
@@ -1595,7 +1607,7 @@ SmBoolean bDebugMe = FALSE ;
           SmPoint3d startPt, endPt;
           pCrvToExtrude->GetEnds( startPt, endPt );
           SmVector3d sLineVector = endPt - startPt;
-          SmVector2d sScale(sLineVector.Length(), dSweepDist);
+          SmVector2d sScale(sLineVector.Length(), dSweepLen);
           SmExtent2d sDomain(0.0, 0.0, 1.0, 1.0) ;
 
           sLineVector.Unitize();
@@ -1603,9 +1615,9 @@ SmBoolean bDebugMe = FALSE ;
           // SMLib requires that SmPlanes be a rectangle
           // Therefore, we check for an orthogonal sweep vector
           // Use the same criterion that is used in the SmPlane constructor:
-          if (smos_Fabs( sLineVector.Dot( crSweepVec )) < SM_EFF_ZERO)
+          if (smos_Fabs( sLineVector.Dot( sSweepDir )) < SM_EFF_ZERO)
           {
-            SmPlane* pPlane = new (*pContext) SmPlane(startPt, sLineVector, crSweepVec, sScale, sDomain);
+            SmPlane* pPlane = new (*pContext) SmPlane(startPt, sLineVector, sSweepDir, sScale, sDomain);
             if( pPlane != NULL )
               { pExtSurface = (SmSurface*)pPlane; }
           }
@@ -1620,10 +1632,10 @@ SmBoolean bDebugMe = FALSE ;
           if( dSweepAngleDeg < 360.0 + dTol && dSweepAngleDeg > 360.0 - dTol )
           {
               SmVector3d zAxis = sFrame.GetZAxis();
-              if( zAxis.IsParallelTo( crSweepVec, 0.5 ) )
+              if( zAxis.IsParallelTo( sSweepDir, 0.5 ) )
               {
                   // If parallel, we still must check if it is opposite
-                  if( crSweepVec.Dot( zAxis ) < 0.0 ) { 
+                  if( sSweepDir.Dot( zAxis ) < 0.0 ) {
                     sFrame.RotateAboutAxisAtPoint( 180 * NL_PI / 180, sFrame.GetOrigin(), sFrame.GetXAxis() );
                   }
                   SmCylinder* pCylinder = NULL;
@@ -1633,7 +1645,7 @@ SmBoolean bDebugMe = FALSE ;
                   {
                       // bound cylinder
                       SmExtent2d sExtent;
-                      sExtent.SetMinMax( 0, 0, 360.0, dSweepDist );  
+                      sExtent.SetMinMax( 0, 0, 360.0, dSweepLen );
                       pCylinder->AdjustSTEPUVDomain( sExtent );
 
                       pExtSurface = (SmSurface*)pCylinder;
@@ -1654,7 +1666,7 @@ SmBoolean bDebugMe = FALSE ;
           NER( pBSplCopy );
 
           eStat = SmSurfOfExtrusion::CreateCanonical( *pContext,
-                                      pBSplCopy, crSweepVec, pSrfExt );
+                                      pBSplCopy, sSweepDir, pSrfExt );
   
           if( pSrfExt != NULL  && eStat == SM_SUCCESS )
           {
@@ -1719,9 +1731,7 @@ SmBoolean bDebugMe = FALSE ;
       // does it make sense to simply copy and translate the first cap?
 
       // build sweep transform into an SmAxis2Placement object
-      SmVector3d sExtrudeVector(crSweepVec.x, crSweepVec.y, crSweepVec.z);
-      sExtrudeVector.Unitize();
-      sExtrudeVector = sExtrudeVector * dSweepDist;
+      SmVector3d sExtrudeVector = sSweepDir * dSweepLen;
       SmAxis2Placement sTranslate(SmVector3d(0, 0, 0), SmVector3d(1, 0, 0), SmVector3d(0, 1, 0));
       sTranslate.Translate(sExtrudeVector);
 

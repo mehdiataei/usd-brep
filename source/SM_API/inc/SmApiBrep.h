@@ -211,8 +211,8 @@ SMAPI_EXPORT SmApiStatus SmApiStitch(
 /// curves are unchanged. The caller owns the new rpResult.
 SMAPI_EXPORT SmApiStatus SmApiCreateLinearSweep( 
     const SmTArray<SmCurve*>& rCurvesToSweep,  ///< [in ]: Curves to sweep                                           <br>
-    const SmVector3d& rSweepDir,               ///< [in ]: Sweep direction                                           <br>
-    double dSweepDist,                   ///< [in ]: Sweep distance                                            <br>
+    const SmVector3d& rSweepDir,               ///< [in ]: Non-zero sweep direction, need not be unit                <br>
+    double dSweepDist,                   ///< [in ]: Sweep length, negative sweeps against rSweepDir           <br>
     SmBoolean bCapEnds,                  ///< [in ]: Cap the ends of the result                                <br>
     SmBrep*& rpResult                   ///< [out]: Resulting SmBrep                                          <br>
 ) ;
@@ -323,8 +323,8 @@ SMAPI_EXPORT SmApiStatus SmApiCreateTaperExtrude(
 
 SMAPI_EXPORT SmApiStatus SmApiCreateLinearSweepWithRepetitions(
     const SmTArray<SmCurve*>& rCurvesToSweep,   ///< [in ]: Curves to sweep                                         <br>
-    const SmVector3d& rSweepDir,                ///< [in ]: Sweep direction                                          <br>
-    double dSweepDist,                    ///< [in ]: Sweep distance                                           <br>
+    const SmVector3d& rSweepDir,                ///< [in ]: Non-zero sweep direction, need not be unit               <br>
+    double dSweepDist,                    ///< [in ]: Sweep length, negative sweeps against rSweepDir          <br>
     ULONG nRepetitions,                   ///< [in ]: Number of end-to-end sweeps                              <br>
     SmBoolean bCapEnds,                   ///< [in ]: Cap the ends of the result                               <br>
     SmBrep*& rpResult                    ///< [out]: Resulting SmBrep                                         <br>
